@@ -2,7 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { auth, db } from "../../lib/firebase.client";
-import { collection, getDocs, orderBy, query, where, limit } from "firebase/firestore";
+import {
+  collection,
+  getDocs,
+  orderBy,
+  query,
+  where,
+  limit
+} from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -20,25 +27,58 @@ export default function UserDashboardPage() {
       if (!u.emailVerified) return router.replace("/verify");
       setUid(u.uid);
 
-      // auctions I won (or ended with me as winner)
-      const aq = query(
-        collection(db, "auctions"),
-        where("winnerUserUid", "==", u.uid),
-        orderBy("updatedAt", "desc"),
-        limit(10)
-      );
-      const ares = await getDocs(aq);
-      setWins(ares.docs.map(d => ({ id: d.id, ...(d.data() as any) })));
+      let winsList: any[] = [];
 
-      // latest bids (count only)
-      const bq = query(
-        collection(db, "bids"),
-        where("userUid", "==", u.uid),
-        orderBy("placedAt", "desc"),
-        limit(10)
-      );
-      const bres = await getDocs(bq);
-      setRecentBids(bres.docs.map(d => d.data()));
+      try {
+        // Try with orderBy first (needs Firestore index)
+        const aq = query(
+          collection(db, "auctions"),
+          where("winnerUserUid", "==", u.uid),
+          orderBy("updatedAt", "desc"),
+          limit(10)
+        );
+        const ares = await getDocs(aq);
+        winsList = ares.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+      } catch (e: any) {
+        console.warn("Index not ready, using fallback query:", e.message);
+        // Fallback query without orderBy if index isn't built yet
+        const aq2 = query(
+          collection(db, "auctions"),
+          where("winnerUserUid", "==", u.uid),
+          limit(10)
+        );
+        const ares2 = await getDocs(aq2);
+        winsList = ares2.docs
+          .map((d) => ({ id: d.id, ...(d.data() as any) }))
+          .sort(
+            (a, b) =>
+              (b.updatedAt?.toMillis?.() ?? 0) -
+              (a.updatedAt?.toMillis?.() ?? 0)
+          );
+      }
+
+      setWins(winsList);
+
+      // Fetch recent bids
+      try {
+        const bq = query(
+          collection(db, "bids"),
+          where("userUid", "==", u.uid),
+          orderBy("placedAt", "desc"),
+          limit(10)
+        );
+        const bres = await getDocs(bq);
+        setRecentBids(bres.docs.map((d) => d.data()));
+      } catch (e: any) {
+        console.warn("Bids query fallback:", e.message);
+        const bq2 = query(
+          collection(db, "bids"),
+          where("userUid", "==", u.uid),
+          limit(10)
+        );
+        const bres2 = await getDocs(bq2);
+        setRecentBids(bres2.docs.map((d) => d.data()));
+      }
 
       setLoading(false);
     });
@@ -54,8 +94,18 @@ export default function UserDashboardPage() {
       <div className="rounded-xl border p-4">
         <div className="font-semibold mb-2">Quick Links</div>
         <div className="flex flex-wrap gap-2">
-          <Link href="/auctions" className="rounded-lg border px-3 py-1.5 hover:bg-gray-50">Browse Auctions</Link>
-          <Link href="/user/auctions" className="rounded-lg border px-3 py-1.5 hover:bg-gray-50">My Auctions</Link>
+          <Link
+            href="/auctions"
+            className="rounded-lg border px-3 py-1.5 hover:bg-gray-50"
+          >
+            Browse Auctions
+          </Link>
+          <Link
+            href="/user/auctions"
+            className="rounded-lg border px-3 py-1.5 hover:bg-gray-50"
+          >
+            My Auctions
+          </Link>
         </div>
       </div>
 
@@ -66,13 +116,20 @@ export default function UserDashboardPage() {
             <div className="text-sm text-gray-600">No wins yet.</div>
           ) : (
             <ul className="space-y-2">
-              {wins.map(a => (
-                <li key={a.id} className="flex items-center justify-between">
+              {wins.map((a) => (
+                <li
+                  key={a.id}
+                  className="flex items-center justify-between border-b last:border-none pb-1"
+                >
                   <div>
                     <div className="font-medium">{a.title || "Auction"}</div>
-                    <div className="text-xs text-gray-600">Status: {a.status}</div>
+                    <div className="text-xs text-gray-600">
+                      Status: {a.status}
+                    </div>
                   </div>
-                  <Link href={`/auctions/${a.id}`} className="text-sm underline">View</Link>
+                  <Link href={`/auctions/${a.id}`} className="text-sm underline">
+                    View
+                  </Link>
                 </li>
               ))}
             </ul>
