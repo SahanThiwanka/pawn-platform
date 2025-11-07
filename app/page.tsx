@@ -4,7 +4,7 @@ export default function HomePage() {
   return (
     <main className="min-h-dvh flex flex-col">
       {/* ---------- HERO SECTION ---------- */}
-      <section className="flex-1 flex flex-col items-center justify-center px-6 text-center bg-gradient-to-b from-gray-50 to-white">
+      <section className="flex-1 flex flex-col items-center justify-center px-6 text-center from-gray-50 to-white">
         <h1 className="text-4xl sm:text-5xl font-bold mb-4">
           Manage Pawn Shops & Auctions Seamlessly
         </h1>
