@@ -3,20 +3,17 @@
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { auth, db } from "../../../lib/firebase.client";
-import { addDoc, collection, serverTimestamp } from "firebase/firestore";
+import { addDoc, collection, serverTimestamp, getDoc, doc } from "firebase/firestore";
 
 export default function NewAuctionClient() {
   const router = useRouter();
-  const search = useSearchParams(); // SAFE now (inside Suspense)
+  const search = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
-  // simple form state
   const [title, setTitle] = useState(search.get("title") || "");
-  const [startPrice, setStartPrice] = useState<number>(
-    Number(search.get("startPrice") || 0)
-  );
+  const [startPrice, setStartPrice] = useState<number>(Number(search.get("startPrice") || 0));
   const [startAt, setStartAt] = useState<string>("");
   const [endAt, setEndAt] = useState<string>("");
 
@@ -25,7 +22,11 @@ export default function NewAuctionClient() {
       if (!u) return router.replace("/login");
       await u.reload();
       if (!u.emailVerified) return router.replace("/verify");
-      // (optional) you can check role/shopId here if needed
+
+      // optional: validate role and shopId
+      const me = await getDoc(doc(db, "users", u.uid));
+      const my = me.data();
+      if (my?.role !== "shop_admin" || !my.shopId) return router.replace("/dashboard");
       setLoading(false);
     });
     return () => unsub();
@@ -40,6 +41,7 @@ export default function NewAuctionClient() {
       setErr("Please fill all required fields.");
       return;
     }
+
     const s = new Date(startAt);
     const eTime = new Date(endAt);
     if (isNaN(s.getTime()) || isNaN(eTime.getTime()) || s >= eTime) {
@@ -51,7 +53,10 @@ export default function NewAuctionClient() {
     if (!u) return setErr("Not authenticated.");
 
     try {
-      // NOTE: add shopId from the logged-in shop profile if you store it
+      const me = await getDoc(doc(db, "users", u.uid));
+      const my = me.data();
+      const shopId = my?.shopId ?? null;
+
       await addDoc(collection(db, "auctions"), {
         title,
         startPrice: Number(startPrice || 0),
@@ -61,84 +66,106 @@ export default function NewAuctionClient() {
         highestBid: 0,
         reservePrice: 0,
         images: [],
-        shopId: null, // TODO: populate with your shopId if applicable
+        shopId,
         createdBy: u.uid,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
 
-      setMsg("Auction created.");
-      router.replace("/shop/auctions");
+      setMsg("Auction created successfully!");
+      setTimeout(() => router.replace("/shop/auctions"), 800);
     } catch (e: any) {
       setErr(e?.message || "Failed to create auction.");
     }
   };
 
-  if (loading) return <div className="p-8">Loading…</div>;
+  if (loading)
+    return (
+      <div className="flex min-h-[100svh] items-center justify-center bg-gray-950 text-gray-400">
+        <div className="animate-pulse rounded-2xl border border-white/10 bg-gray-900/70 px-8 py-6 backdrop-blur-md">
+          Loading form…
+        </div>
+      </div>
+    );
 
   return (
-    <main className="max-w-3xl mx-auto p-6 space-y-6">
-      <h1 className="text-2xl font-bold">Create Auction</h1>
+    <div className="relative min-h-[100svh] bg-gray-950 text-gray-100">
+      {/* gradient glow background */}
+      <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 via-sky-500 to-cyan-400 opacity-25 blur-3xl" />
 
-      <form onSubmit={submit} className="space-y-4 rounded-xl border p-4">
-        <div>
-          <label className="block text-sm text-gray-600 mb-1">
-            Title *
-          </label>
-          <input
-            className="w-full border rounded-lg px-3 py-2"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="e.g., 22K Gold Necklace"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm text-gray-600 mb-1">
-            Start Price *
-          </label>
-          <input
-            type="number"
-            className="w-full border rounded-lg px-3 py-2"
-            value={startPrice}
-            onChange={(e) => setStartPrice(Number(e.target.value))}
-            min={0}
-          />
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div>
-            <label className="block text-sm text-gray-600 mb-1">
-              Start At (local) *
-            </label>
-            <input
-              type="datetime-local"
-              className="w-full border rounded-lg px-3 py-2"
-              value={startAt}
-              onChange={(e) => setStartAt(e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="block text-sm text-gray-600 mb-1">
-              End At (local) *
-            </label>
-            <input
-              type="datetime-local"
-              className="w-full border rounded-lg px-3 py-2"
-              value={endAt}
-              onChange={(e) => setEndAt(e.target.value)}
-            />
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button className="rounded-lg bg-black text-white px-4 py-2">
-            Create
+      <main className="relative z-10 mx-auto max-w-3xl p-6 space-y-8">
+        <div className="flex items-center justify-between">
+          <h1 className="text-3xl font-bold">Create Auction</h1>
+          <button
+            onClick={() => router.back()}
+            className="rounded-full border border-white/10 bg-gray-800/80 px-4 py-2 text-sm text-gray-200 hover:bg-indigo-600 hover:text-white transition"
+          >
+            Back
           </button>
-          {err && <span className="text-sm text-red-600">{err}</span>}
-          {msg && <span className="text-sm text-green-700">{msg}</span>}
         </div>
-      </form>
-    </main>
+
+        <form
+          onSubmit={submit}
+          className="space-y-6 rounded-2xl border border-white/10 bg-gray-900/70 p-6 backdrop-blur-md"
+        >
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Title *</label>
+            <input
+              className="w-full rounded-lg border border-white/10 bg-gray-800/70 px-3 py-2 text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="e.g., 22K Gold Necklace"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Start Price (LKR) *</label>
+            <input
+              type="number"
+              className="w-full rounded-lg border border-white/10 bg-gray-800/70 px-3 py-2 text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              value={startPrice}
+              onChange={(e) => setStartPrice(Number(e.target.value))}
+              min={0}
+              required
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Start At (local) *</label>
+              <input
+                type="datetime-local"
+                className="w-full rounded-lg border border-white/10 bg-gray-800/70 px-3 py-2 text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                value={startAt}
+                onChange={(e) => setStartAt(e.target.value)}
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">End At (local) *</label>
+              <input
+                type="datetime-local"
+                className="w-full rounded-lg border border-white/10 bg-gray-800/70 px-3 py-2 text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                value={endAt}
+                onChange={(e) => setEndAt(e.target.value)}
+                required
+              />
+            </div>
+          </div>
+
+          <div className="pt-2 flex flex-col sm:flex-row items-start sm:items-center gap-3">
+            <button
+              className="rounded-xl bg-indigo-600 px-6 py-2 text-white font-medium hover:opacity-90 transition"
+              type="submit"
+            >
+              Create Auction
+            </button>
+            {err && <p className="text-sm text-red-400">{err}</p>}
+            {msg && <p className="text-sm text-emerald-400">{msg}</p>}
+          </div>
+        </form>
+      </main>
+    </div>
   );
 }
