@@ -1,38 +1,283 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useState } from "react";
+import { auth, db } from "./lib/firebase.client";
+import { doc, getDoc } from "firebase/firestore";
+
+// --- Simple brand tokens (keep in TSX for single-file drop-in) ---
+const Brand = {
+  name: "ePawning",
+  gradient: "from-indigo-500 via-sky-500 to-cyan-400",
+  primary: "bg-indigo-600",
+};
+
+type Role = "user" | "shop_admin" | null;
 
 export default function HomePage() {
-  return (
-    <main className="min-h-dvh flex flex-col">
-      {/* ---------- HERO SECTION ---------- */}
-      <section className="flex-1 flex flex-col items-center justify-center px-6 text-center from-gray-50 to-white">
-        <h1 className="text-4xl sm:text-5xl font-bold mb-4">
-          Manage Pawn Shops & Auctions Seamlessly
-        </h1>
-        <p className="text-gray-600 max-w-xl mb-8">
-          MultiPawn connects customers and pawn shops on one secure platform.
-          Manage loans, auctions, and reminders — all in one place.
-        </p>
+  const [loading, setLoading] = useState(true);
+  const [authed, setAuthed] = useState(false);
+  const [role, setRole] = useState<Role>(null);
+  const [verified, setVerified] = useState<boolean | null>(null);
 
-        <div className="flex flex-wrap justify-center gap-4">
-          <Link
-            href="/register"
-            className="rounded-xl bg-black text-white px-6 py-3 hover:bg-gray-800"
-          >
-            Get Started
-          </Link>
-          <Link
-            href="/login"
-            className="rounded-xl border border-gray-400 px-6 py-3 hover:bg-gray-100"
-          >
-            Login
-          </Link>
+  useEffect(() => {
+    const unsub = auth.onAuthStateChanged(async (u) => {
+      if (!u) {
+        setAuthed(false);
+        setRole(null);
+        setVerified(null);
+        setLoading(false);
+        return;
+      }
+      setAuthed(true);
+      await u.reload();
+      setVerified(u.emailVerified);
+      try {
+        const snap = await getDoc(doc(db, "users", u.uid));
+        setRole((snap.exists() && (snap.data() as any).role) || null);
+      } catch {
+        setRole(null);
+      } finally {
+        setLoading(false);
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  return (
+    <div className="relative min-h-[100svh] overflow-hidden">
+      {/* Soft radial background */}
+      <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${Brand.gradient} opacity-20`} />
+      <div className="absolute -top-40 -left-40 h-[32rem] w-[32rem] rounded-full bg-white/25 blur-3xl" />
+      <div className="absolute -bottom-40 -right-40 h-[32rem] w-[32rem] rounded-full bg-white/25 blur-3xl" />
+
+      {/* Header */}
+      <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-5">
+        <div className="flex items-center gap-3">
+          <LogoMark />
+          <span className="text-lg font-semibold tracking-tight">{Brand.name}</span>
+        </div>
+        <div className="flex items-center gap-3 text-sm">
+          <LanguageSelect />
+          {!authed ? (
+            <Link href="/login" className="rounded-full border border-white/60 bg-white/60 px-4 py-2 backdrop-blur hover:bg-white">
+              Login
+            </Link>
+          ) : null}
+        </div>
+      </header>
+
+      {/* Main */}
+      <main className="relative z-10 mx-auto grid w-full max-w-6xl grid-cols-1 gap-8 px-6 pb-16 pt-4 md:grid-cols-2 md:pt-6">
+        <div className="order-2 space-y-6 md:order-1">
+          <h1 className="text-3xl font-bold leading-tight md:text-5xl">
+            Simple & instant pawn loans.
+            <br className="hidden md:block" />
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-black/80 to-black/60"> Bid on the best deals.</span>
+          </h1>
+          <p className="max-w-prose text-base text-black/70 md:text-lg">
+            Create an account in minutes, verify your mobile, and start pledging jewelry or bidding in live auctions with transparent increments.
+          </p>
+          <PrimaryCTA authed={authed} verified={verified} role={role} />
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <Feature title="Secure Sign‑in" desc="Email + Google, verification, role‑based access." />
+            <Feature title="Live Auctions" desc="Auto timers, realtime bids, fair steps." />
+            <Feature title="Loan Workflow" desc="Pledge jewelry, shop terms, settlement." />
+          </div>
+        </div>
+
+        {/* Phone mock / visual */}
+        <div className="order-1 md:order-2">
+          <PhoneShowcase />
+        </div>
+      </main>
+
+      {/* How it works section */}
+      <section className="relative z-10 mx-auto mb-20 w-full max-w-6xl px-6">
+        <div className="rounded-3xl border border-white/40 bg-white/70 p-6 backdrop-blur-md md:p-8">
+          <h2 className="text-xl font-semibold md:text-2xl">How it works</h2>
+          <ol className="mt-4 list-decimal space-y-2 pl-5 text-black/80">
+            <li>Register as a user or a pawn shop.</li>
+            <li>Verify mobile and complete profile/KYC.</li>
+            <li>Users request loans using jewelry as collateral.</li>
+            <li>Shops list eligible collateral in live auctions.</li>
+            <li>Auctions end automatically and winners are recorded for settlement.</li>
+          </ol>
+          <div className="mt-6 flex flex-wrap gap-2">
+            <OutlineLink href="/register/user">Register User</OutlineLink>
+            <OutlineLink href="/register/shop">Register Shop</OutlineLink>
+            <OutlineLink href="/auctions">Explore Auctions</OutlineLink>
+          </div>
         </div>
       </section>
 
-      {/* ---------- FOOTER ---------- */}
-      <footer className="border-t text-center text-sm text-gray-500 py-4">
-        © {new Date().getFullYear()} MultiPawn Platform. All rights reserved.
+      {/* Footer */}
+      <footer className="relative z-10 mx-auto w-full max-w-6xl px-6 pb-8 text-xs text-black/60">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <span>© {new Date().getFullYear()} {Brand.name}. All rights reserved.</span>
+          <nav className="flex gap-4">
+            <Link className="hover:underline" href="#">Privacy</Link>
+            <Link className="hover:underline" href="#">Terms</Link>
+            <Link className="hover:underline" href="#">Help</Link>
+          </nav>
+        </div>
       </footer>
-    </main>
+    </div>
+  );
+}
+
+// --- Components ---
+function PrimaryCTA({ authed, verified, role }: { authed: boolean; verified: boolean | null; role: Role }) {
+  if (!authed) {
+    return (
+      <div className="flex flex-wrap gap-3">
+        <PrimaryButton href="/register/user">Create Account</PrimaryButton>
+        <OutlineLink href="/login">Login</OutlineLink>
+        <OutlineLink href="/auctions">Browse Auctions</OutlineLink>
+      </div>
+    );
+  }
+
+  if (verified === false) {
+    return (
+      <div className="flex flex-wrap gap-3">
+        <PrimaryButton href="/verify">Verify Email</PrimaryButton>
+        <OutlineLink href="/auctions">Browse Auctions</OutlineLink>
+      </div>
+    );
+  }
+
+  if (role === "shop_admin") {
+    return (
+      <div className="flex flex-wrap gap-3">
+        <PrimaryButton href="/shop/dashboard">Shop Dashboard</PrimaryButton>
+        <OutlineLink href="/shop/auctions">Manage Auctions</OutlineLink>
+        <OutlineLink href="/shop/sales">Sales</OutlineLink>
+        <OutlineLink href="/auctions">Public Auctions</OutlineLink>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-wrap gap-3">
+      <PrimaryButton href="/user/dashboard">My Dashboard</PrimaryButton>
+      <OutlineLink href="/user/auctions">My Auctions</OutlineLink>
+      <OutlineLink href="/auctions">Browse Auctions</OutlineLink>
+    </div>
+  );
+}
+
+function Feature({ title, desc }: { title: string; desc: string }) {
+  return (
+    <div className="rounded-2xl border border-white/60 bg-white/70 p-4 backdrop-blur-md">
+      <div className="text-sm font-semibold md:text-base">{title}</div>
+      <p className="mt-1 text-xs text-black/70 md:text-sm">{desc}</p>
+    </div>
+  );
+}
+
+function PrimaryButton({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <Link
+      href={href}
+      className="rounded-full bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white shadow-lg shadow-indigo-600/20 transition hover:translate-y-[-1px] hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-indigo-400"
+    >
+      {children}
+    </Link>
+  );
+}
+
+function OutlineLink({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <Link
+      href={href}
+      className="rounded-full border border-black/10 bg-white/70 px-5 py-2.5 text-sm font-medium text-black/80 backdrop-blur transition hover:bg-white"
+    >
+      {children}
+    </Link>
+  );
+}
+
+function LanguageSelect() {
+  return (
+    <div className="group relative">
+      <select className="appearance-none rounded-full border border-white/50 bg-white/60 px-4 py-2 pr-8 text-sm backdrop-blur hover:bg-white">
+        <option>English</option>
+        <option>සිංහල</option>
+        <option>தமிழ்</option>
+      </select>
+      <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs opacity-70">▾</div>
+    </div>
+  );
+}
+
+function PhoneShowcase() {
+  return (
+    <div className="mx-auto grid max-w-sm gap-4">
+      <div className="rounded-[2.2rem] border border-black/10 bg-white p-4 shadow-xl">
+        <div className={`rounded-[1.8rem] bg-gradient-to-b ${Brand.gradient} p-5 text-white`}>
+          <div className="mb-6 flex items-center justify-between text-xs opacity-90">
+            <span>Create Account</span>
+            <span className="rounded-full bg-white/20 px-2 py-1">Guest</span>
+          </div>
+          <div className="rounded-2xl bg-white/90 p-4 text-black">
+            <LabeledInput label="Mobile Number" placeholder="07x xxx xxxx" />
+            <LabeledInput label="Email Address" placeholder="you@example.com" />
+            <div className="mt-3 flex items-center gap-2 text-xs">
+              <input id="agree1" type="checkbox" className="h-4 w-4 rounded border-black/20" />
+              <label htmlFor="agree1">I agree to the privacy policy</label>
+            </div>
+            <div className="mt-2 flex items-center gap-2 text-xs">
+              <input id="agree2" type="checkbox" className="h-4 w-4 rounded border-black/20" />
+              <label htmlFor="agree2">I agree to the terms and conditions</label>
+            </div>
+            <button className="mt-4 w-full rounded-xl bg-black px-4 py-2 text-white">Next →</button>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-[2.2rem] border border-black/10 bg-white p-4 shadow-xl">
+        <div className={`rounded-[1.8rem] bg-gradient-to-b ${Brand.gradient} p-5 text-white`}>
+          <div className="mb-6 text-xs opacity-90">Mobile Verification</div>
+          <div className="rounded-2xl bg-white/90 p-4 text-black">
+            <div className="text-sm">Enter the 4‑digit code we sent</div>
+            <div className="mt-3 grid grid-cols-4 gap-2">
+              {[0, 1, 2, 3].map((i) => (
+                <input key={i} className="h-12 rounded-xl border border-black/20 text-center text-lg" maxLength={1} />
+              ))}
+            </div>
+            <button className="mt-4 w-full rounded-xl bg-black px-4 py-2 text-white">Verify</button>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-[2.2rem] border border-black/10 bg-white p-4 shadow-xl">
+        <div className={`rounded-[1.8rem] bg-gradient-to-b ${Brand.gradient} p-5 text-white`}>
+          <div className="mb-6 text-xs opacity-90">Success</div>
+          <div className="grid place-items-center rounded-2xl bg-white/90 p-10 text-black">
+            <div className="grid h-16 w-16 place-items-center rounded-full bg-emerald-500 text-white">✓</div>
+            <div className="mt-3 text-center text-sm">You have successfully created your account</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LabeledInput({ label, placeholder }: { label: string; placeholder?: string }) {
+  return (
+    <label className="mb-2 block text-xs">
+      <span className="mb-1 block text-black/70">{label}</span>
+      <input placeholder={placeholder} className="w-full rounded-xl border border-black/20 bg-white/70 px-3 py-2 outline-none ring-indigo-200 focus:ring" />
+    </label>
+  );
+}
+
+function LogoMark() {
+  return (
+    <div className="grid h-10 w-10 place-items-center rounded-2xl bg-white shadow ring-1 ring-black/10">
+      <span className="text-xl">⚡</span>
+    </div>
   );
 }

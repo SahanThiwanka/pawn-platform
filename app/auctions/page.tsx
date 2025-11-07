@@ -6,7 +6,15 @@ import { db } from "../lib/firebase.client";
 import Link from "next/link";
 import { toDateAny } from "../lib/auction";
 
-type A = { id: string; title: string; images?: string[]; status: string; startAt?: any; endAt?: any; startPrice?: number };
+type A = {
+  id: string;
+  title: string;
+  images?: string[];
+  status: string;
+  startAt?: any;
+  endAt?: any;
+  startPrice?: number;
+};
 
 export default function AuctionsListPage() {
   const [live, setLive] = useState<A[]>([]);
@@ -16,7 +24,6 @@ export default function AuctionsListPage() {
 
   useEffect(() => {
     (async () => {
-      // Live first
       const liveQ = query(
         collection(db, "auctions"),
         where("status", "==", "live"),
@@ -36,7 +43,11 @@ export default function AuctionsListPage() {
         limit(10)
       );
 
-      const [lS, sS, eS] = await Promise.all([getDocs(liveQ), getDocs(schedQ), getDocs(endedQ)]);
+      const [lS, sS, eS] = await Promise.all([
+        getDocs(liveQ),
+        getDocs(schedQ),
+        getDocs(endedQ),
+      ]);
 
       setLive(lS.docs.map(d => ({ id: d.id, ...(d.data() as any) })));
       setSched(sS.docs.map(d => ({ id: d.id, ...(d.data() as any) })));
@@ -55,18 +66,29 @@ export default function AuctionsListPage() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {items.map(a => (
-            <Link key={a.id} href={`/auctions/${a.id}`} className="border rounded-xl overflow-hidden hover:shadow-sm">
+            <Link
+              key={a.id}
+              href={`/auctions/${a.id}`}
+              className="border rounded-xl overflow-hidden hover:shadow-sm"
+            >
               {a.images?.[0] ? (
-                <img src={a.images[0]} alt={a.title} className="h-40 w-full object-cover" />
+                <img
+                  src={a.images[0]}
+                  alt={a.title}
+                  className="h-40 w-full object-cover"
+                />
               ) : (
                 <div className="h-40 w-full bg-gray-100" />
               )}
               <div className="p-3">
                 <div className="font-medium">{a.title || "Auction"}</div>
                 <div className="text-xs text-gray-600">
-                  {a.status === "scheduled" && `Starts: ${toDateAny(a.startAt)?.toLocaleString()}`}
-                  {a.status === "live" && `Ends: ${toDateAny(a.endAt)?.toLocaleString()}`}
-                  {a.status === "ended" && `Ended: ${toDateAny(a.endAt)?.toLocaleString()}`}
+                  {a.status === "scheduled" &&
+                    `Starts: ${toDateAny(a.startAt)?.toLocaleString()}`}
+                  {a.status === "live" &&
+                    `Ends: ${toDateAny(a.endAt)?.toLocaleString()}`}
+                  {a.status === "ended" &&
+                    `Ended: ${toDateAny(a.endAt)?.toLocaleString()}`}
                 </div>
               </div>
             </Link>

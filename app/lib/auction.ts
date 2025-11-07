@@ -23,7 +23,6 @@ export function hasEnded(auction: any): boolean {
 
 export function minNextBid(startPrice: number, highestBid?: number): number {
   const base = Math.max(startPrice || 0, highestBid || 0);
-  // simple increment rule (you can refine later)
   const inc = base < 1000 ? 10 : base < 5000 ? 50 : 100;
   return base + inc;
 }
