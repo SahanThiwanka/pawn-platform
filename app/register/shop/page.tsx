@@ -5,6 +5,8 @@ import { createUserWithEmailAndPassword, signInWithPopup } from "firebase/auth";
 import { doc, getDoc, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { sendEmailVerification } from "firebase/auth";
+import { actionCodeSettings } from "../../lib/verification";
 
 export default function RegisterShopPage() {
   const router = useRouter();
@@ -12,30 +14,25 @@ export default function RegisterShopPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const finish = () => router.replace("/profile/shop");
-
   const setRoleDoc = async (uid: string, email?: string) => {
     const ref = doc(db, "users", uid);
     const snap = await getDoc(ref);
     if (!snap.exists()) {
-      await setDoc(ref, {
-        role: "shop_admin",
-        email: email ?? null,
-        profileCompleted: false,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
+      await setDoc(ref, { role: "shop_admin", email: email ?? null, profileCompleted: false, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
     } else {
       await updateDoc(ref, { role: "shop_admin", email: email ?? snap.data().email ?? null, updatedAt: serverTimestamp() });
     }
   };
+
+  const finish = () => router.replace("/profile/shop");
 
   const registerEmail = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       const cred = await createUserWithEmailAndPassword(auth, email, password);
       await setRoleDoc(cred.user.uid, email);
-      finish();
+      await sendEmailVerification(cred.user, actionCodeSettings);
+      router.replace("/verify");
     } catch (e:any) { setError(e.message); }
   };
 
@@ -43,6 +40,10 @@ export default function RegisterShopPage() {
     try {
       const cred = await signInWithPopup(auth, googleProvider);
       await setRoleDoc(cred.user.uid, cred.user.email || undefined);
+      if (auth.currentUser && !auth.currentUser.emailVerified) {
+        await sendEmailVerification(auth.currentUser, actionCodeSettings);
+        return router.replace("/verify");
+      }
       finish();
     } catch (e:any) { setError(e.message); }
   };

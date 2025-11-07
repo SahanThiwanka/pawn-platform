@@ -10,21 +10,31 @@ type Role = "user" | "shop_admin" | null;
 
 export default function NavBar() {
   const pathname = usePathname();
+
   const [authed, setAuthed] = useState(false);
+  const [emailVerified, setEmailVerified] = useState<boolean | null>(null);
   const [role, setRole] = useState<Role>(null);
 
   useEffect(() => {
     const unsub = auth.onAuthStateChanged(async (u) => {
       if (!u) {
         setAuthed(false);
+        setEmailVerified(null);
         setRole(null);
         return;
       }
+
       setAuthed(true);
-      // get role from Firestore
-      const snap = await getDoc(doc(db, "users", u.uid));
-      const r = (snap.exists() && snap.data().role) || null;
-      setRole(r);
+      await u.reload(); // make sure emailVerified is up to date
+      setEmailVerified(u.emailVerified);
+
+      try {
+        const snap = await getDoc(doc(db, "users", u.uid));
+        const r = (snap.exists() && (snap.data() as any).role) || null;
+        setRole(r);
+      } catch {
+        setRole(null);
+      }
     });
     return () => unsub();
   }, []);
@@ -34,32 +44,46 @@ export default function NavBar() {
     window.location.href = "/login";
   };
 
-  // links when not logged in
-  const publicLinks = [
+  // public links (not logged in)
+  const publicLinks: { href: string; label: string }[] = [
     { href: "/", label: "Home" },
+    { href: "/auctions", label: "Auctions" }, // public browse
     { href: "/login", label: "Login" },
     { href: "/register/user", label: "Register User" },
     { href: "/register/shop", label: "Register Shop" },
   ];
 
-  // links by role
+  // links while logged in but NOT email-verified
+  const verifyLinks: { href: string; label: string }[] = [
+    { href: "/verify", label: "Verify Email" },
+  ];
+
+  // role-based links (ONLY one Dashboard item shown)
   const privateLinksByRole: Record<Exclude<Role, null>, { href: string; label: string }[]> = {
     user: [
       { href: "/user/dashboard", label: "Dashboard" },
-      // add more: { href: "/user/profile", label: "Profile" }
+      { href: "/user/loans", label: "Loans" },
+      { href: "/user/shops", label: "My Shops" },
+      { href: "/user/shops/requests", label: "Requests" },
+      { href: "/auctions", label: "Auctions" }, // public page still accessible
     ],
     shop_admin: [
       { href: "/shop/dashboard", label: "Dashboard" },
-      // add more: { href: "/shop/items", label: "Items" }
+      { href: "/shop/loans", label: "Loans" },
+      { href: "/shop/customers", label: "Customers" },
+      { href: "/shop/auctions", label: "Auctions" },
     ],
   };
 
-  // show links depending on login & role
-  const linksToShow = authed
-    ? role
-      ? privateLinksByRole[role]
-      : [] // no role yet — maybe during first login
-    : publicLinks;
+  // decide which links to show
+  const linksToShow =
+    authed
+      ? emailVerified === false
+        ? verifyLinks
+        : role
+          ? privateLinksByRole[role]
+          : [] // logged in but role not set yet
+      : publicLinks;
 
   return (
     <nav className="w-full border-b bg-white/80 backdrop-blur">
@@ -69,17 +93,21 @@ export default function NavBar() {
         </Link>
 
         <div className="flex items-center gap-4 text-sm font-medium">
-          {linksToShow.map((l) => (
-            <Link
-              key={l.href}
-              href={l.href}
-              className={`px-2 py-1 rounded ${
-                pathname === l.href ? "text-blue-600" : "hover:text-blue-600"
-              }`}
-            >
-              {l.label}
-            </Link>
-          ))}
+          {linksToShow.map((l) => {
+            const active = pathname === l.href || (l.href !== "/" && pathname.startsWith(l.href));
+            return (
+              <Link
+                key={l.href}
+                href={l.href}
+                className={`px-2 py-1 rounded ${
+                  active ? "text-blue-600" : "hover:text-blue-600"
+                }`}
+              >
+                {l.label}
+              </Link>
+            );
+          })}
+
           {authed && (
             <button
               onClick={logout}

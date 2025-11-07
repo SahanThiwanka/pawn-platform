@@ -5,6 +5,8 @@ import { signInWithPopup, signInWithEmailAndPassword } from "firebase/auth";
 import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { sendEmailVerification } from "firebase/auth";
+import { actionCodeSettings } from "../lib/verification";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -16,29 +18,30 @@ export default function LoginPage() {
     const ref = doc(db, "users", uid);
     const snap = await getDoc(ref);
     if (!snap.exists()) {
-      await setDoc(ref, {
-        role: null,
-        profileCompleted: false,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
+      await setDoc(ref, { role: null, profileCompleted: false, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
     }
     return (await getDoc(ref)).data()!;
   };
 
-  const routeByState = (data: any) => {
-    if (!data.role) return router.replace("/register"); // choose role
-    if (!data.profileCompleted) {
-      return router.replace(data.role === "shop_admin" ? "/profile/shop" : "/profile/user");
+  const routeByState = async () => {
+    const u = auth.currentUser!;
+    await u.reload();
+    if (!u.emailVerified) {
+      await sendEmailVerification(u, actionCodeSettings);
+      return router.replace("/verify");
     }
+    const snap = await getDoc(doc(db, "users", u.uid));
+    const data = snap.data();
+    if (!data?.role) return router.replace("/register");
+    if (!data.profileCompleted) return router.replace(data.role === "shop_admin" ? "/profile/shop" : "/profile/user");
     return router.replace("/dashboard");
   };
 
   const loginGoogle = async () => {
     try {
       const cred = await signInWithPopup(auth, googleProvider);
-      const data = await ensureUserDoc(cred.user.uid);
-      routeByState(data);
+      await ensureUserDoc(cred.user.uid);
+      await routeByState();
     } catch (e:any) { setError(e.message); }
   };
 
@@ -46,8 +49,8 @@ export default function LoginPage() {
     e.preventDefault();
     try {
       const cred = await signInWithEmailAndPassword(auth, email, password);
-      const data = await ensureUserDoc(cred.user.uid);
-      routeByState(data);
+      await ensureUserDoc(cred.user.uid);
+      await routeByState();
     } catch (e:any) { setError(e.message); }
   };
 
