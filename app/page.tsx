@@ -58,7 +58,7 @@ export default function HomePage() {
           <span className="text-lg font-semibold tracking-tight">{Brand.name}</span>
         </div>
         <div className="flex items-center gap-3 text-sm">
-          <LanguageSelect />
+         
           {!authed ? (
             <Link href="/login" className="rounded-full border border-white/60 bg-white/60 px-4 py-2 backdrop-blur hover:bg-white">
               Login
@@ -87,10 +87,7 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Phone mock / visual */}
-        <div className="order-1 md:order-2">
-          <PhoneShowcase />
-        </div>
+
       </main>
 
       {/* How it works section */}
@@ -106,7 +103,6 @@ export default function HomePage() {
           </ol>
           <div className="mt-6 flex flex-wrap gap-2">
             <OutlineLink href="/register/user">Register User</OutlineLink>
-            <OutlineLink href="/register/shop">Register Shop</OutlineLink>
             <OutlineLink href="/auctions">Explore Auctions</OutlineLink>
           </div>
         </div>
@@ -162,7 +158,6 @@ function PrimaryCTA({ authed, verified, role }: { authed: boolean; verified: boo
   return (
     <div className="flex flex-wrap gap-3">
       <PrimaryButton href="/user/dashboard">My Dashboard</PrimaryButton>
-      <OutlineLink href="/user/auctions">My Auctions</OutlineLink>
       <OutlineLink href="/auctions">Browse Auctions</OutlineLink>
     </div>
   );
@@ -196,72 +191,6 @@ function OutlineLink({ href, children }: { href: string; children: React.ReactNo
     >
       {children}
     </Link>
-  );
-}
-
-function LanguageSelect() {
-  return (
-    <div className="group relative">
-      <select className="appearance-none rounded-full border border-white/50 bg-white/60 px-4 py-2 pr-8 text-sm backdrop-blur hover:bg-white">
-        <option>English</option>
-        <option>සිංහල</option>
-        <option>தமிழ்</option>
-      </select>
-      <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs opacity-70">▾</div>
-    </div>
-  );
-}
-
-function PhoneShowcase() {
-  return (
-    <div className="mx-auto grid max-w-sm gap-4">
-      <div className="rounded-[2.2rem] border border-black/10 bg-white p-4 shadow-xl">
-        <div className={`rounded-[1.8rem] bg-gradient-to-b ${Brand.gradient} p-5 text-white`}>
-          <div className="mb-6 flex items-center justify-between text-xs opacity-90">
-            <span>Create Account</span>
-            <span className="rounded-full bg-white/20 px-2 py-1">Guest</span>
-          </div>
-          <div className="rounded-2xl bg-white/90 p-4 text-black">
-            <LabeledInput label="Mobile Number" placeholder="07x xxx xxxx" />
-            <LabeledInput label="Email Address" placeholder="you@example.com" />
-            <div className="mt-3 flex items-center gap-2 text-xs">
-              <input id="agree1" type="checkbox" className="h-4 w-4 rounded border-black/20" />
-              <label htmlFor="agree1">I agree to the privacy policy</label>
-            </div>
-            <div className="mt-2 flex items-center gap-2 text-xs">
-              <input id="agree2" type="checkbox" className="h-4 w-4 rounded border-black/20" />
-              <label htmlFor="agree2">I agree to the terms and conditions</label>
-            </div>
-            <button className="mt-4 w-full rounded-xl bg-black px-4 py-2 text-white">Next →</button>
-          </div>
-        </div>
-      </div>
-
-      <div className="rounded-[2.2rem] border border-black/10 bg-white p-4 shadow-xl">
-        <div className={`rounded-[1.8rem] bg-gradient-to-b ${Brand.gradient} p-5 text-white`}>
-          <div className="mb-6 text-xs opacity-90">Mobile Verification</div>
-          <div className="rounded-2xl bg-white/90 p-4 text-black">
-            <div className="text-sm">Enter the 4‑digit code we sent</div>
-            <div className="mt-3 grid grid-cols-4 gap-2">
-              {[0, 1, 2, 3].map((i) => (
-                <input key={i} className="h-12 rounded-xl border border-black/20 text-center text-lg" maxLength={1} />
-              ))}
-            </div>
-            <button className="mt-4 w-full rounded-xl bg-black px-4 py-2 text-white">Verify</button>
-          </div>
-        </div>
-      </div>
-
-      <div className="rounded-[2.2rem] border border-black/10 bg-white p-4 shadow-xl">
-        <div className={`rounded-[1.8rem] bg-gradient-to-b ${Brand.gradient} p-5 text-white`}>
-          <div className="mb-6 text-xs opacity-90">Success</div>
-          <div className="grid place-items-center rounded-2xl bg-white/90 p-10 text-black">
-            <div className="grid h-16 w-16 place-items-center rounded-full bg-emerald-500 text-white">✓</div>
-            <div className="mt-3 text-center text-sm">You have successfully created your account</div>
-          </div>
-        </div>
-      </div>
-    </div>
   );
 }
 
