@@ -1,24 +1,61 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { auth, db } from "../../lib/firebase.client";
-import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { auth, db } from "../../lib/firebase.client";
+import {
+  collection,
+  getDocs,
+  limit,
+  query,
+  where,
+  updateDoc,
+  doc,
+  Timestamp,
+  serverTimestamp,
+  getDoc,
+} from "firebase/firestore";
 
-type Row = {
+type Loan = {
   id: string;
-  customerEmail: string;
-  status: string;
-  outstandingPrincipal: number;
-  accruedInterest: number;
-  dueDate?: string;
+  collateralId: string;
+  userUid: string;
+  shopId: string | null;
+  principal: number;
+  interestPct: number;
+  durationDays: number;
+  startAt?: any;
+  dueAt?: any;
+  status: "active" | "repaid" | "defaulted" | "closed";
+  outstanding?: number;
+  totalPaid?: number;
+  updatedAt?: any;
 };
+
+const toDateAny = (v: any): Date | null =>
+  v instanceof Date
+    ? v
+    : v instanceof Timestamp
+    ? v.toDate()
+    : typeof v === "string" || typeof v === "number"
+    ? new Date(v)
+    : null;
+
+const fmtMoney = (n?: number) =>
+  Number(n || 0).toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 
 export default function ShopLoansPage() {
   const router = useRouter();
-  const [rows, setRows] = useState<Row[]>([]);
+  const [shopId, setShopId] = useState<string | null>(null);
+  const [rows, setRows] = useState<Loan[]>([]);
   const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
     const unsub = auth.onAuthStateChanged(async (u) => {
@@ -26,134 +63,173 @@ export default function ShopLoansPage() {
       await u.reload();
       if (!u.emailVerified) return router.replace("/verify");
 
-      const me = await getDoc(doc(db, "users", u.uid));
-      const my = me.data();
-      if (my?.role !== "shop_admin" || !my.shopId) return router.replace("/dashboard");
+      const meSnap = await getDoc(doc(db, "users", u.uid));
+      const me = meSnap.data() as any;
+      if (me?.role !== "shop_admin" || !me?.shopId)
+        return router.replace("/dashboard");
+      setShopId(me.shopId);
 
-      const qLoans = query(collection(db, "loans"), where("shopId", "==", my.shopId));
-      const ls = await getDocs(qLoans);
-
-      const out: Row[] = [];
-      for (const d of ls.docs) {
-        const loan = d.data();
-        const cust = await getDoc(doc(db, "users", loan.customerUid));
-        const email = cust.exists() ? (cust.data().email ?? "—") : "—";
-        out.push({
-          id: d.id,
-          customerEmail: email,
-          status: loan.status,
-          outstandingPrincipal: Number(loan.outstandingPrincipal || 0),
-          accruedInterest: Number(loan.accruedInterest || 0),
-          dueDate: loan.dueDate
-            ? new Date(loan.dueDate.seconds * 1000).toLocaleDateString()
-            : undefined,
-        });
-      }
-      setRows(out);
+      const qL = query(
+        collection(db, "loans"),
+        where("shopId", "==", me.shopId),
+        limit(300)
+      );
+      const res = await getDocs(qL);
+      const list = res.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+      setRows(list as Loan[]);
       setLoading(false);
     });
     return () => unsub();
   }, [router]);
 
-  if (loading) {
-    return (
-      <div className="flex min-h-[100svh] items-center justify-center bg-gray-950 text-gray-400">
-        <div className="animate-pulse rounded-2xl border border-white/10 bg-gray-900/70 px-8 py-6 backdrop-blur-md">
-          Loading loans…
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="relative min-h-[100svh] bg-gray-950 text-gray-100">
-      {/* gradient glow */}
-      <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 via-sky-500 to-cyan-400 opacity-25 blur-3xl" />
-
-      <main className="relative z-10 mx-auto max-w-5xl p-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-bold">Shop Loans</h1>
-          <Link
-            href="/shop/dashboard"
-            className="rounded-full border border-white/10 bg-gray-800/80 px-4 py-2 text-sm text-gray-200 hover:bg-indigo-600 hover:text-white transition"
-          >
-            Back to Dashboard
-          </Link>
-        </div>
-
-        <section className="rounded-2xl border border-white/10 bg-gray-900/70 backdrop-blur-md overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-900/80 text-gray-300">
-              <tr className="border-b border-white/10">
-                <th className="text-left p-3 text-xs font-semibold uppercase tracking-wide">
-                  Customer
-                </th>
-                <th className="text-left p-3 text-xs font-semibold uppercase tracking-wide">
-                  Status
-                </th>
-                <th className="text-left p-3 text-xs font-semibold uppercase tracking-wide">
-                  Outstanding
-                </th>
-                <th className="text-left p-3 text-xs font-semibold uppercase tracking-wide">
-                  Interest
-                </th>
-                <th className="text-left p-3 text-xs font-semibold uppercase tracking-wide">
-                  Due
-                </th>
-                <th className="p-3"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr
-                  key={r.id}
-                  className="border-t border-white/10 hover:bg-gray-800/40 transition"
-                >
-                  <td className="p-3 font-mono text-xs text-gray-300">{r.customerEmail}</td>
-                  <td className="p-3">
-                    <StatusBadge status={r.status} />
-                  </td>
-                  <td className="p-3">{r.outstandingPrincipal.toFixed(2)}</td>
-                  <td className="p-3 text-gray-300">{r.accruedInterest.toFixed(2)}</td>
-                  <td className="p-3 text-gray-400">{r.dueDate ?? "—"}</td>
-                  <td className="p-3 text-right">
-                    <Link
-                      href={`/shop/loans/${r.id}`}
-                      className="rounded-xl bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:opacity-90"
-                    >
-                      Manage
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-              {rows.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="p-6 text-center text-gray-400">
-                    No loans yet.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </section>
-      </main>
-    </div>
+  const active = useMemo(() => rows.filter((r) => r.status === "active"), [rows]);
+  const repaid = useMemo(
+    () => rows.filter((r) => ["repaid", "closed"].includes(r.status)),
+    [rows]
   );
-}
+  const defaulted = useMemo(() => rows.filter((r) => r.status === "defaulted"), [rows]);
 
-function StatusBadge({ status }: { status: string }) {
-  const map: Record<string, string> = {
-    active: "bg-sky-500/15 text-sky-300 ring-1 ring-sky-500/30 animate-pulse",
-    settled: "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/30",
-    overdue: "bg-red-500/15 text-red-300 ring-1 ring-red-500/30",
-    default: "bg-gray-500/15 text-gray-300 ring-1 ring-gray-500/30",
+  const sortActive = [...active].sort(
+    (a, b) => (toDateAny(a.dueAt)?.getTime() ?? 0) - (toDateAny(b.dueAt)?.getTime() ?? 0)
+  );
+  const sortRepaid = [...repaid].sort(
+    (a, b) => (toDateAny(b.updatedAt)?.getTime() ?? 0) - (toDateAny(a.updatedAt)?.getTime() ?? 0)
+  );
+  const sortDefaulted = [...defaulted].sort(
+    (a, b) => (toDateAny(b.updatedAt)?.getTime() ?? 0) - (toDateAny(a.updatedAt)?.getTime() ?? 0)
+  );
+
+  const mark = async (id: string, status: "repaid" | "defaulted") => {
+    setBusy(id);
+    setMsg(null);
+    setErr(null);
+    try {
+      await updateDoc(doc(db, "loans", id), { status, updatedAt: serverTimestamp() });
+      setRows((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, status } : r))
+      );
+      setMsg(`Marked as ${status}.`);
+    } catch (e: any) {
+      setErr(e?.message || "Failed to update.");
+    } finally {
+      setBusy(null);
+    }
   };
-  const cls = map[status?.toLowerCase?.()] || map.default;
+
+  if (loading)
+    return <div className="p-8 text-center text-gray-400">Loading…</div>;
+
+  const Section = ({
+    title,
+    items,
+    actions = true,
+  }: {
+    title: string;
+    items: Loan[];
+    actions?: boolean;
+  }) => (
+    <section className="space-y-3">
+      <h2 className="text-xl font-semibold">{title}</h2>
+      <div className="rounded-xl border border-white/10 bg-gray-900/40 backdrop-blur-sm overflow-hidden">
+        <table className="w-full text-sm text-gray-200">
+          <thead className="bg-gray-800/60 text-gray-300">
+            <tr>
+              <th className="text-left p-3">Loan</th>
+              <th className="text-left p-3">User</th>
+              <th className="text-left p-3">Collateral</th>
+              <th className="text-left p-3">Principal</th>
+              <th className="text-left p-3">Outstanding</th>
+              <th className="text-left p-3">Interest</th>
+              <th className="text-left p-3">Due</th>
+              <th className="text-left p-3">Status</th>
+              <th className="p-3 text-right">Link</th>
+              {actions && <th className="p-3 text-right">Actions</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((r) => (
+              <tr key={r.id} className="border-t border-white/10">
+                <td className="p-3">
+                  <code className="text-xs text-gray-400">{r.id.slice(0, 8)}</code>
+                </td>
+                <td className="p-3">
+                  <code className="text-xs text-gray-400">{r.userUid}</code>
+                </td>
+                <td className="p-3">
+                  <code className="text-xs text-gray-400">{r.collateralId}</code>
+                </td>
+                <td className="p-3">{fmtMoney(r.principal)}</td>
+                <td className="p-3">
+                  {fmtMoney(typeof r.outstanding === "number" ? r.outstanding : r.principal)}
+                </td>
+                <td className="p-3">{(r.interestPct ?? 0).toFixed(2)}%</td>
+                <td className="p-3">{toDateAny(r.dueAt)?.toLocaleString?.() || "—"}</td>
+                <td className="p-3 capitalize">{r.status}</td>
+                <td className="p-3 text-right">
+                  <Link
+                    href={`/shop/loans/${r.id}`}
+                    className="text-sky-400 underline text-xs hover:text-sky-300"
+                  >
+                    Open
+                  </Link>
+                </td>
+                {actions && (
+                  <td className="p-3 text-right">
+                    {r.status === "active" ? (
+                      <div className="flex gap-2 justify-end">
+                        <button
+                          onClick={() => mark(r.id, "repaid")}
+                          disabled={busy === r.id}
+                          className="rounded-lg bg-sky-600 hover:bg-sky-500 text-white px-3 py-1.5 text-xs disabled:opacity-50"
+                        >
+                          {busy === r.id ? "Saving…" : "Mark Repaid"}
+                        </button>
+                        <button
+                          onClick={() => mark(r.id, "defaulted")}
+                          disabled={busy === r.id}
+                          className="rounded-lg border border-white/10 bg-gray-800 hover:bg-gray-700 px-3 py-1.5 text-xs disabled:opacity-50"
+                        >
+                          Default
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-gray-600">—</span>
+                    )}
+                  </td>
+                )}
+              </tr>
+            ))}
+            {items.length === 0 && (
+              <tr>
+                <td className="p-4 text-center text-gray-500" colSpan={actions ? 10 : 9}>
+                  No items.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+
   return (
-    <span
-      className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${cls}`}
-    >
-      {status}
-    </span>
+    <main className="relative max-w-6xl mx-auto p-6 space-y-10 text-gray-100">
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-indigo-500 via-sky-500 to-cyan-400 opacity-20 blur-3xl" />
+      <div className="relative flex items-center justify-between">
+        <h1 className="text-3xl font-bold bg-gradient-to-r from-sky-400 to-cyan-300 bg-clip-text text-transparent">
+          Shop Loans
+        </h1>
+        <Link href="/shop/dashboard" className="text-sm text-sky-400 underline hover:text-sky-300">
+          Back to Dashboard
+        </Link>
+      </div>
+
+      <Section title="Active" items={sortActive} />
+      <Section title="Repaid / Closed" items={sortRepaid} actions={false} />
+      <Section title="Defaulted" items={sortDefaulted} actions={false} />
+
+      {msg && <p className="text-green-400 text-sm">{msg}</p>}
+      {err && <p className="text-red-400 text-sm">{err}</p>}
+    </main>
   );
 }

@@ -19,7 +19,13 @@ type Auction = {
   id: string;
   title?: string;
   images?: string[];
-  status: "scheduled" | "live" | "ended" | "settled" | "settlement_pending" | string;
+  status:
+    | "scheduled"
+    | "live"
+    | "ended"
+    | "settled"
+    | "settlement_pending"
+    | string;
   startAt?: any;
   endAt?: any;
   updatedAt?: any;
@@ -37,7 +43,11 @@ function toDateAny(v: any): Date | null {
 function fmtLKR(n?: number) {
   if (typeof n !== "number") return "";
   try {
-    return new Intl.NumberFormat("en-LK", { style: "currency", currency: "LKR", maximumFractionDigits: 2 }).format(n);
+    return new Intl.NumberFormat("en-LK", {
+      style: "currency",
+      currency: "LKR",
+      maximumFractionDigits: 2,
+    }).format(n);
   } catch {
     return n.toFixed(2);
   }
@@ -60,15 +70,18 @@ export default function ShopAuctionsPage() {
 
       const me = await getDoc(doc(db, "users", u.uid));
       const my = me.data() as any;
-      if (my?.role !== "shop_admin" || !my.shopId) return router.replace("/dashboard");
+      if (my?.role !== "shop_admin" || !my.shopId)
+        return router.replace("/dashboard");
+
       setShopId(my.shopId);
 
-      // no orderBy → no composite index required
-      const col = collection(db, "auctions");
-      const qAll = query(col, where("shopId", "==", my.shopId), limit(200));
+      const qAll = query(
+        collection(db, "auctions"),
+        where("shopId", "==", my.shopId),
+        limit(200)
+      );
       const res = await getDocs(qAll);
-      const all = res.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
-      setRows(all as Auction[]);
+      setRows(res.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as Auction[]);
       setLoading(false);
     });
     return () => unsub();
@@ -100,7 +113,7 @@ export default function ShopAuctionsPage() {
     return arr;
   }, [filtered, tab]);
 
-  if (loading) {
+  if (loading)
     return (
       <div className="flex min-h-[100svh] items-center justify-center bg-gray-950 text-gray-400">
         <div className="animate-pulse rounded-2xl border border-white/10 bg-gray-900/70 px-8 py-6 backdrop-blur-md">
@@ -108,34 +121,39 @@ export default function ShopAuctionsPage() {
         </div>
       </div>
     );
-  }
 
   return (
     <div className="relative min-h-[100svh] bg-gray-950 text-gray-100">
-      {/* glow */}
-      <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 via-sky-500 to-cyan-400 opacity-25 blur-3xl" />
-      <main className="relative z-10 max-w-6xl mx-auto p-6 space-y-6">
+      {/* Glow layer */}
+      <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/25 via-sky-500/15 to-cyan-400/10 blur-3xl" />
+
+      <main className="relative z-10 max-w-6xl mx-auto p-6 space-y-8">
+        {/* Header */}
         <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-bold">Shop Auctions</h1>
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-400 to-cyan-300 bg-clip-text text-transparent">
+            Shop Auctions
+          </h1>
           <Link
             href="/shop/auctions/new"
             className="rounded-full bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:opacity-90 transition"
           >
-            New Auction
+            + New Auction
           </Link>
         </div>
 
         {/* Tabs */}
         <div className="flex flex-wrap gap-2">
-          {(["scheduled","live","ended","settlement_pending","settled"] as const).map((t) => (
+          {(
+            ["scheduled", "live", "ended", "settlement_pending", "settled"] as const
+          ).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
-              className={`px-3 py-1.5 rounded-full text-sm transition
-                ${tab === t
-                  ? "bg-white text-gray-900"
-                  : "border border-white/10 bg-gray-900/60 text-gray-200 hover:bg-gray-800/60"
-                }`}
+              className={`px-3 py-1.5 rounded-full text-sm font-medium capitalize transition ${
+                tab === t
+                  ? "bg-indigo-500 text-white shadow-md shadow-indigo-500/30"
+                  : "border border-white/10 bg-gray-900/60 text-gray-300 hover:bg-gray-800/60"
+              }`}
             >
               {t.replace("_", " ")}
             </button>
@@ -147,35 +165,62 @@ export default function ShopAuctionsPage() {
           <table className="w-full text-sm">
             <thead className="bg-gray-900/80 text-gray-300">
               <tr className="border-b border-white/10">
-                <th className="text-left p-3 text-xs font-semibold uppercase tracking-wide">Title</th>
-                <th className="text-left p-3 text-xs font-semibold uppercase tracking-wide">Status</th>
-                <th className="text-left p-3 text-xs font-semibold uppercase tracking-wide">Start</th>
-                <th className="text-left p-3 text-xs font-semibold uppercase tracking-wide">End</th>
+                <th className="text-left p-3 text-xs font-semibold uppercase tracking-wide">
+                  Title
+                </th>
+                <th className="text-left p-3 text-xs font-semibold uppercase tracking-wide">
+                  Status
+                </th>
+                <th className="text-left p-3 text-xs font-semibold uppercase tracking-wide">
+                  Start
+                </th>
+                <th className="text-left p-3 text-xs font-semibold uppercase tracking-wide">
+                  End
+                </th>
                 <th className="p-3" />
               </tr>
             </thead>
             <tbody>
               {sorted.map((a) => (
-                <tr key={a.id} className="border-t border-white/10 hover:bg-gray-800/40 transition">
+                <tr
+                  key={a.id}
+                  className="border-t border-white/10 hover:bg-gray-800/40 transition"
+                >
                   <td className="p-3">
-                    <div className="font-medium">{a.title || "Auction"}</div>
-                    <div className="text-xs text-gray-400">
-                      {typeof a.startPrice === "number" && `Start Price: ${fmtLKR(a.startPrice)}`}
+                    <div className="flex items-center gap-3">
+                      {a.images?.[0] ? (
+                        <img
+                          src={a.images[0]}
+                          alt="thumb"
+                          className="w-12 h-12 object-cover rounded-md border border-white/10"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 rounded-md bg-gray-800 flex items-center justify-center text-xs text-gray-500">
+                          —
+                        </div>
+                      )}
+                      <div>
+                        <div className="font-medium">{a.title || "Auction"}</div>
+                        <div className="text-xs text-gray-400">
+                          {typeof a.startPrice === "number" &&
+                            `Start Price: ${fmtLKR(a.startPrice)}`}
+                        </div>
+                      </div>
                     </div>
                   </td>
                   <td className="p-3">
                     <StatusBadge status={a.status} />
                   </td>
-                  <td className="p-3">
+                  <td className="p-3 text-gray-300">
                     {toDateAny(a.startAt)?.toLocaleString?.() || "—"}
                   </td>
-                  <td className="p-3">
+                  <td className="p-3 text-gray-300">
                     {toDateAny(a.endAt)?.toLocaleString?.() || "—"}
                   </td>
                   <td className="p-3 text-right">
                     <Link
                       href={`/auctions/${a.id}`}
-                      className="rounded-xl bg-indigo-600 px-3 py-1.5 text-white hover:opacity-90"
+                      className="rounded-lg bg-indigo-600 px-3 py-1.5 text-white text-sm hover:opacity-90"
                     >
                       View
                     </Link>
@@ -197,7 +242,6 @@ export default function ShopAuctionsPage() {
   );
 }
 
-/* Status badge */
 function StatusBadge({ status }: { status: string }) {
   const cls =
     {
@@ -206,10 +250,13 @@ function StatusBadge({ status }: { status: string }) {
       ended: "bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/30",
       settlement_pending: "bg-pink-500/15 text-pink-300 ring-1 ring-pink-500/30",
       settled: "bg-indigo-500/15 text-indigo-300 ring-1 ring-indigo-500/30",
-    }[status?.toLowerCase?.()] || "bg-gray-600/15 text-gray-300 ring-1 ring-gray-600/30";
+    }[status?.toLowerCase?.()] ||
+    "bg-gray-600/15 text-gray-300 ring-1 ring-gray-600/30";
 
   return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${cls}`}>
+    <span
+      className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${cls}`}
+    >
       {status.replace("_", " ")}
     </span>
   );

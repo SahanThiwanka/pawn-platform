@@ -29,7 +29,6 @@ export default function AcceptLoanOfferPage() {
         return;
       }
       if (data.customerUid && data.customerUid !== u.uid) {
-        // prevent accepting someone else's loan
         router.replace("/user/loans");
         return;
       }
@@ -41,9 +40,12 @@ export default function AcceptLoanOfferPage() {
 
   const fmt = (n: number) => {
     try {
-      return new Intl.NumberFormat("en-LK", { style: "currency", currency: "LKR" }).format(Number(n || 0));
+      return new Intl.NumberFormat("en-LK", {
+        style: "currency",
+        currency: "LKR",
+      }).format(Number(n || 0));
     } catch {
-      return (Number(n || 0)).toFixed(2);
+      return Number(n || 0).toFixed(2);
     }
   };
 
@@ -63,7 +65,6 @@ export default function AcceptLoanOfferPage() {
     setErr(null);
     setAccepting(true);
     try {
-      // activate loan window
       const start = new Date();
       const due = new Date(start.getTime() + loan.termDays * 24 * 60 * 60 * 1000);
 
@@ -91,7 +92,7 @@ export default function AcceptLoanOfferPage() {
     }
   };
 
-  if (loading) {
+  if (loading)
     return (
       <div className="flex min-h-[100svh] items-center justify-center bg-gray-950 text-gray-400">
         <div className="animate-pulse rounded-2xl border border-white/10 bg-gray-900/70 px-8 py-6 backdrop-blur-md">
@@ -99,48 +100,50 @@ export default function AcceptLoanOfferPage() {
         </div>
       </div>
     );
-  }
 
-  if (!loan) {
+  if (!loan)
     return (
       <div className="flex min-h-[100svh] items-center justify-center bg-gray-950 text-gray-400">
         Not found
       </div>
     );
-  }
 
   return (
     <div className="relative min-h-[100svh] bg-gray-950 text-gray-100">
-      {/* brand glow */}
+      {/* glowing background */}
       <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 via-sky-500 to-cyan-400 opacity-25 blur-3xl" />
 
-      <main className="relative z-10 mx-auto max-w-xl p-6">
-        <header className="mb-6 flex items-center justify-between">
-          <h1 className="text-3xl font-bold">Loan Offer</h1>
+      <main className="relative z-10 mx-auto max-w-xl p-6 space-y-6">
+        <header className="flex items-center justify-between">
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-400 to-cyan-300 bg-clip-text text-transparent">
+            Loan Offer
+          </h1>
           <button
             onClick={() => router.back()}
-            className="rounded-full border border-white/10 bg-gray-800/80 px-4 py-2 text-sm text-gray-200 hover:bg-indigo-600 hover:text-white"
+            className="rounded-full border border-white/20 bg-gray-800/70 px-4 py-2 text-sm text-gray-200 hover:bg-gray-700/60 transition"
           >
             Back
           </button>
         </header>
 
-        <section className="rounded-2xl border border-white/10 bg-gray-900/70 p-5 backdrop-blur-md">
-          <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 text-sm">
+        <section className="rounded-2xl border border-white/10 bg-gray-900/70 p-5 backdrop-blur-md space-y-5">
+          <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
             {metrics?.map((m) => (
               <li key={m.label} className="rounded-xl bg-gray-800/60 p-3">
                 <div className="text-xs text-gray-400">{m.label}</div>
-                <div className="mt-0.5 font-semibold">{m.value}</div>
+                <div className="mt-0.5 font-semibold text-gray-100">{m.value}</div>
               </li>
             ))}
           </ul>
 
-          <div className="mt-5 rounded-xl border border-amber-400/30 bg-amber-500/10 p-4 text-sm text-amber-200">
-            By accepting, interest accrues from the **start date** until **due date**.  
-            You can top up principal up to your cap and settle anytime by paying the total due.
+          <div className="rounded-xl border border-amber-400/30 bg-amber-500/10 p-4 text-sm text-amber-200">
+            By accepting, interest accrues from the{" "}
+            <span className="font-semibold text-amber-100">start date</span> until the{" "}
+            <span className="font-semibold text-amber-100">due date</span>. You can request
+            top-ups and repay anytime before the loan matures.
           </div>
 
-          <div className="mt-5 flex flex-col items-stretch gap-3 sm:flex-row">
+          <div className="flex flex-col sm:flex-row items-stretch gap-3">
             {!confirming ? (
               <button
                 onClick={() => setConfirming(true)}

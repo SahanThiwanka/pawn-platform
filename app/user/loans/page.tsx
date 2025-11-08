@@ -1,24 +1,58 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { auth, db } from "../../lib/firebase.client";
-import { collection, getDocs, query, where, doc, getDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { auth, db } from "../../lib/firebase.client";
+import {
+  collection,
+  getDocs,
+  limit,
+  query,
+  where,
+  Timestamp,
+} from "firebase/firestore";
 
-type Row = {
+type Loan = {
   id: string;
-  shopName: string;
-  status: string;
+  collateralId: string;
+  userUid: string;
+  shopId: string | null;
   principal: number;
-  outstandingPrincipal: number;
-  accruedInterest: number;
-  dueDate?: string;
+  interestPct: number;
+  durationDays: number;
+  startAt?: any;
+  dueAt?: any;
+  status: "active" | "repaid" | "defaulted" | "closed";
+  updatedAt?: any;
 };
+
+function toDateAny(v: any): Date | null {
+  if (!v) return null;
+  if (v instanceof Date) return v;
+  if (v instanceof Timestamp) return v.toDate();
+  if (typeof v === "string" || typeof v === "number") return new Date(v);
+  return null;
+}
+
+function fmtMoney(n: number | undefined) {
+  const v = Number(n || 0);
+  return v.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function daysLeft(dueAt?: any) {
+  const d = toDateAny(dueAt)?.getTime();
+  if (!d) return null;
+  const ms = d - Date.now();
+  return Math.ceil(ms / (24 * 3600 * 1000));
+}
 
 export default function UserLoansPage() {
   const router = useRouter();
-  const [rows, setRows] = useState<Row[]>([]);
+  const [rows, setRows] = useState<Loan[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -27,168 +61,151 @@ export default function UserLoansPage() {
       await u.reload();
       if (!u.emailVerified) return router.replace("/verify");
 
-      const me = await getDoc(doc(db, "users", u.uid));
-      if (me.data()?.role !== "user") return router.replace("/dashboard");
-
-      const qLoans = query(collection(db, "loans"), where("customerUid", "==", u.uid));
-      const ls = await getDocs(qLoans);
-      const out: Row[] = [];
-      for (const d of ls.docs) {
-        const loan = d.data() as any;
-        const shopSnap = await getDoc(doc(db, "shops", loan.shopId));
-        const shopName = shopSnap.exists() ? (shopSnap.data()?.shopName ?? "Shop") : "Shop";
-        out.push({
-          id: d.id,
-          shopName,
-          status: loan.status,
-          principal: Number(loan.principal || 0),
-          outstandingPrincipal: Number(loan.outstandingPrincipal || 0),
-          accruedInterest: Number(loan.accruedInterest || 0),
-          dueDate: loan.dueDate ? new Date(loan.dueDate.seconds * 1000).toLocaleDateString() : undefined,
-        });
-      }
-      setRows(out);
+      const qL = query(
+        collection(db, "loans"),
+        where("userUid", "==", u.uid),
+        limit(200)
+      );
+      const res = await getDocs(qL);
+      const list = res.docs.map(
+        (d) => ({ id: d.id, ...(d.data() as any) } as Loan)
+      );
+      setRows(list);
       setLoading(false);
     });
     return () => unsub();
   }, [router]);
 
-  const totals = useMemo(() => {
-    const outstanding = rows.reduce((s, r) => s + (r.outstandingPrincipal || 0), 0);
-    const interest = rows.reduce((s, r) => s + (r.accruedInterest || 0), 0);
-    return { outstanding, interest };
-  }, [rows]);
+  const active = useMemo(() => rows.filter((r) => r.status === "active"), [rows]);
+  const repaid = useMemo(
+    () => rows.filter((r) => r.status === "repaid" || r.status === "closed"),
+    [rows]
+  );
+  const defaulted = useMemo(() => rows.filter((r) => r.status === "defaulted"), [rows]);
 
-  if (loading) {
+  const sortActive = [...active].sort(
+    (a, b) => (toDateAny(a.dueAt)?.getTime() ?? 0) - (toDateAny(b.dueAt)?.getTime() ?? 0)
+  );
+  const sortRepaid = [...repaid].sort(
+    (a, b) => (toDateAny(b.updatedAt)?.getTime() ?? 0) - (toDateAny(a.updatedAt)?.getTime() ?? 0)
+  );
+  const sortDefaulted = [...defaulted].sort(
+    (a, b) => (toDateAny(b.updatedAt)?.getTime() ?? 0) - (toDateAny(a.updatedAt)?.getTime() ?? 0)
+  );
+
+  if (loading)
     return (
-      <div className="relative min-h-[100svh]">
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-indigo-500 via-sky-500 to-cyan-400 opacity-25 blur-3xl" />
-        <main className="relative z-10 mx-auto grid min-h-[100svh] w-full place-items-center px-4">
-          <div className="w-full max-w-4xl rounded-3xl border border-white/10 bg-gray-900/70 p-6 backdrop-blur-md">
-            <div className="animate-pulse space-y-4">
-              <div className="h-7 w-1/3 rounded bg-white/10" />
-              <div className="h-10 w-full rounded bg-white/10" />
-              <div className="h-10 w-full rounded bg-white/10" />
-              <div className="h-10 w-full rounded bg-white/10" />
-            </div>
-          </div>
-        </main>
+      <div className="flex min-h-[100svh] items-center justify-center bg-gray-950 text-gray-400">
+        <div className="animate-pulse rounded-2xl border border-white/10 bg-gray-900/70 px-8 py-6 backdrop-blur-md">
+          Loading loans…
+        </div>
       </div>
     );
-  }
+
+  const Section = ({ title, items }: { title: string; items: Loan[] }) => (
+    <section className="space-y-3">
+      <h2 className="text-lg font-semibold">{title}</h2>
+      <div className="rounded-xl border border-white/10 bg-gray-900/60 backdrop-blur-md overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-800/70 text-gray-300">
+            <tr>
+              <th className="text-left p-3">Collateral</th>
+              <th className="text-left p-3">Principal</th>
+              <th className="text-left p-3">Interest</th>
+              <th className="text-left p-3">Due</th>
+              <th className="text-left p-3">Days Left</th>
+              <th className="text-left p-3">Status</th>
+              <th className="p-3 w-20"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((r) => {
+              const left = daysLeft(r.dueAt);
+              return (
+                <tr
+                  key={r.id}
+                  className="border-t border-white/10 hover:bg-gray-800/40 transition"
+                >
+                  <td className="p-3">
+                    <div className="font-medium text-gray-100">
+                      <code className="text-xs text-cyan-300">{r.collateralId}</code>
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      Shop: <code className="text-[10px]">{r.shopId}</code>
+                    </div>
+                  </td>
+                  <td className="p-3 text-gray-200">{fmtMoney(r.principal)}</td>
+                  <td className="p-3 text-gray-300">
+                    {(r.interestPct ?? 0).toFixed(2)}%
+                  </td>
+                  <td className="p-3 text-gray-300">
+                    {toDateAny(r.dueAt)?.toLocaleString?.() || "—"}
+                  </td>
+                  <td className="p-3 font-medium">
+                    {left !== null ? (
+                      <span
+                        className={
+                          left < 0
+                            ? "text-rose-400 font-semibold"
+                            : "text-cyan-300"
+                        }
+                      >
+                        {left}d
+                      </span>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                  <td className="p-3 text-gray-200">{r.status}</td>
+                  <td className="p-3 text-right">
+                    <Link
+                      href={`/user/loans/${r.id}`}
+                      className="text-xs text-cyan-300 hover:underline"
+                    >
+                      Open
+                    </Link>
+                  </td>
+                </tr>
+              );
+            })}
+            {items.length === 0 && (
+              <tr>
+                <td
+                  className="p-4 text-gray-400 text-center"
+                  colSpan={7}
+                >
+                  No items.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
 
   return (
     <div className="relative min-h-[100svh] bg-gray-950 text-gray-100">
-      {/* brand glow */}
+      {/* glowing gradient */}
       <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 via-sky-500 to-cyan-400 opacity-25 blur-3xl" />
 
-      <main className="relative z-10 mx-auto max-w-4xl space-y-6 p-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold">My Loans</h1>
-            <p className="mt-1 text-sm text-gray-400">Track balances and due dates.</p>
-          </div>
-          <Link href="/user/dashboard" className="rounded-full border border-white/10 bg-gray-800/80 px-4 py-2 text-sm text-gray-200 hover:bg-indigo-600 hover:text-white">
-            Back
+      <main className="relative z-10 max-w-6xl mx-auto p-6 space-y-8">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-400 to-cyan-300 bg-clip-text text-transparent">
+            My Loans
+          </h1>
+          <Link
+            href="/user/collateral"
+            className="rounded-lg border border-white/20 bg-gray-800/60 px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-700/60 transition"
+          >
+            My Jewelry
           </Link>
         </div>
 
-        {/* Summary chips */}
-        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="rounded-2xl border border-white/10 bg-gray-900/70 p-4 backdrop-blur-md">
-            <div className="text-sm text-gray-400">Total Outstanding</div>
-            <div className="mt-1 text-2xl font-semibold text-indigo-400">
-              {formatCurrency(totals.outstanding)}
-            </div>
-          </div>
-          <div className="rounded-2xl border border-white/10 bg-gray-900/70 p-4 backdrop-blur-md">
-            <div className="text-sm text-gray-400">Accrued Interest</div>
-            <div className="mt-1 text-2xl font-semibold text-cyan-300">
-              {formatCurrency(totals.interest)}
-            </div>
-          </div>
-        </section>
-
-        {/* Table */}
-        <section className="overflow-hidden rounded-2xl border border-white/10 bg-gray-900/70 backdrop-blur-md">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-gray-900/90 text-left text-gray-300">
-                <tr className="border-b border-white/10">
-                  <Th>Shop</Th>
-                  <Th>Status</Th>
-                  <Th className="text-right">Outstanding</Th>
-                  <Th className="text-right">Interest</Th>
-                  <Th className="text-right">Due</Th>
-                </tr>
-              </thead>
-              <tbody className="[&_tr]:border-t [&_tr]:border-white/10">
-                {rows.map((r) => (
-                  <tr key={r.id} className="hover:bg-gray-800/40">
-                    <td className="p-3">{r.shopName}</td>
-                    <td className="p-3">
-                      <StatusChip status={r.status} />
-                    </td>
-                    <td className="p-3 text-right">{formatCurrency(r.outstandingPrincipal)}</td>
-                    <td className="p-3 text-right">{formatCurrency(r.accruedInterest)}</td>
-                    <td className="p-3 text-right">{r.dueDate ?? "—"}</td>
-                    <td className="p-3 text-right">
-                      <Link
-                        href={`/user/loans/${r.id}`}
-                        className="rounded-full border border-white/10 bg-gray-800/80 px-3 py-1.5 text-xs text-gray-200 hover:bg-indigo-600 hover:text-white"
-                      >
-                        View
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-                {rows.length === 0 && (
-                  <tr>
-                    <td className="p-4 text-center text-gray-400" colSpan={6}>
-                      No loans yet.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
+        <Section title="Active" items={sortActive} />
+        <Section title="Repaid / Closed" items={sortRepaid} />
+        <Section title="Defaulted" items={sortDefaulted} />
       </main>
     </div>
   );
-}
-
-function Th({
-  children,
-  className = "",
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return <th className={`p-3 text-xs font-semibold uppercase tracking-wide ${className}`}>{children}</th>;
-}
-
-function StatusChip({ status }: { status: string }) {
-  const map: Record<string, string> = {
-    active: "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/30",
-    overdue: "bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/30",
-    closed: "bg-gray-500/20 text-gray-300 ring-1 ring-gray-500/30",
-    defaulted: "bg-red-500/15 text-red-300 ring-1 ring-red-500/30",
-    submitted: "bg-indigo-500/15 text-indigo-300 ring-1 ring-indigo-500/30",
-  };
-  const cls = map[status?.toLowerCase?.()] ?? "bg-gray-500/20 text-gray-300 ring-1 ring-gray-500/30";
-  return <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs ${cls}`}>{status}</span>;
-}
-
-function formatCurrency(n: number) {
-  // Customize currency if needed; default is LKR-style no symbol
-  try {
-    return new Intl.NumberFormat("en-LK", {
-      style: "currency",
-      currency: "LKR",
-      maximumFractionDigits: 2,
-    }).format(n || 0);
-  } catch {
-    return (n || 0).toFixed(2);
-  }
 }

@@ -69,12 +69,15 @@ export default function NavBar() {
       { href: "/user/shops", label: "My Shops" },
       { href: "/user/shops/requests", label: "Requests" },
       { href: "/auctions", label: "Auctions" },
+      { href: "/user/collateral", label: "My Jewelry" },
     ],
     shop_admin: [
       { href: "/shop/dashboard", label: "Dashboard" },
       { href: "/shop/loans", label: "Loans" },
       { href: "/shop/customers", label: "Customers" },
       { href: "/shop/auctions", label: "Auctions" },
+      { href: "/shop/loan-requests", label: "Loan Requests" },
+      { href: "/shop/payments", label: "Payments" },
     ],
   };
 

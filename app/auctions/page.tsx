@@ -12,7 +12,6 @@ import {
   Timestamp,
 } from "firebase/firestore";
 
-// convert timestamp to JS Date
 function toDateAny(v: any): Date | null {
   if (!v) return null;
   if (v instanceof Date) return v;
@@ -47,20 +46,27 @@ export default function AuctionsListPage() {
           getDocs(query(col, where("status", "==", "ended"), limit(50))),
         ]);
 
-        const mapDocs = (s: any[]) => s.map(d => ({ id: d.id, ...(d.data() as any) }));
+        const mapDocs = (s: any[]) =>
+          s.map((d) => ({ id: d.id, ...(d.data() as any) }));
 
         const liveRaw = mapDocs(lS.docs);
         const schedRaw = mapDocs(sS.docs);
         const endedRaw = mapDocs(eS.docs);
 
         liveRaw.sort(
-          (a, b) => (toDateAny(a.endAt)?.getTime() ?? 0) - (toDateAny(b.endAt)?.getTime() ?? 0)
+          (a, b) =>
+            (toDateAny(a.endAt)?.getTime() ?? 0) -
+            (toDateAny(b.endAt)?.getTime() ?? 0)
         );
         schedRaw.sort(
-          (a, b) => (toDateAny(a.startAt)?.getTime() ?? 0) - (toDateAny(b.startAt)?.getTime() ?? 0)
+          (a, b) =>
+            (toDateAny(a.startAt)?.getTime() ?? 0) -
+            (toDateAny(b.startAt)?.getTime() ?? 0)
         );
         endedRaw.sort(
-          (a, b) => (toDateAny(b.endAt)?.getTime() ?? 0) - (toDateAny(a.endAt)?.getTime() ?? 0)
+          (a, b) =>
+            (toDateAny(b.endAt)?.getTime() ?? 0) -
+            (toDateAny(a.endAt)?.getTime() ?? 0)
         );
 
         setLive(liveRaw);
@@ -87,7 +93,18 @@ export default function AuctionsListPage() {
       <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 via-sky-500 to-cyan-400 opacity-25 blur-3xl" />
 
       <main className="relative z-10 max-w-6xl mx-auto p-6 space-y-8">
-        <h1 className="text-3xl font-bold">Auctions</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-400 to-cyan-300 bg-clip-text text-transparent">
+            Auctions
+          </h1>
+          <Link
+            href="/auctions/new"
+            className="rounded-full border border-white/10 bg-gray-800/80 px-4 py-2 text-sm hover:bg-indigo-600 hover:text-white transition"
+          >
+            + New Auction
+          </Link>
+        </div>
+
         <Section title="Live" items={live} />
         <Section title="Scheduled" items={sched} />
         <Section title="Recently Ended" items={ended} />
@@ -101,7 +118,7 @@ export default function AuctionsListPage() {
 function Section({ title, items }: { title: string; items: Auction[] }) {
   return (
     <section className="space-y-4">
-      <h2 className="text-xl font-semibold">{title}</h2>
+      <h2 className="text-xl font-semibold text-gray-200">{title}</h2>
       {items.length === 0 ? (
         <p className="text-sm text-gray-400">No items.</p>
       ) : (
@@ -126,7 +143,7 @@ function AuctionCard({ a }: { a: Auction }) {
   return (
     <Link
       href={`/auctions/${a.id}`}
-      className="group overflow-hidden rounded-2xl border border-white/10 bg-gray-900/70 backdrop-blur-md hover:-translate-y-1 hover:shadow-lg hover:shadow-black/30 transition"
+      className="group overflow-hidden rounded-2xl border border-white/10 bg-gray-900/60 backdrop-blur-md hover:-translate-y-1 hover:shadow-[0_0_25px_-5px_rgba(56,189,248,0.3)] transition-all"
     >
       <div className="relative h-40 w-full overflow-hidden">
         {a.images?.[0] ? (
@@ -145,8 +162,10 @@ function AuctionCard({ a }: { a: Auction }) {
         </div>
       </div>
       <div className="p-4 space-y-2">
-        <div className="line-clamp-1 font-medium">{a.title || "Auction"}</div>
-        <div className="text-xs text-gray-400">
+        <div className="line-clamp-1 font-medium text-gray-100">
+          {a.title || "Auction"}
+        </div>
+        <div className="text-xs text-cyan-300/80">
           {a.status === "scheduled" && `Starts: ${date ?? "—"}`}
           {a.status === "live" && `Ends: ${date ?? "—"}`}
           {a.status === "ended" && `Ended: ${date ?? "—"}`}
